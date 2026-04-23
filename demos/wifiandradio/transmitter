@@ -176,7 +176,7 @@ void transmitRadioData() {
   Serial.println("Sending to rf95_server");
 
   char packetSize[100];
-  String radioPacket = "D:" + String(read_depth(), 2) +
+  String radioPacket = "Depth: " + String(read_depth(), 2) +
                        "m | Temp: " + String(pressureSensor.temperature(), 1) +
                        " C | Pressure: " + String(pressureSensor.pressure(), 2) +
                        " mbar | #" + String(packetnum++);
