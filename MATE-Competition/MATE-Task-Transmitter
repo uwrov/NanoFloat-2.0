@@ -391,7 +391,46 @@ void radiotransmit_data() {
 // //================================================================================================================================================
 // //                                                        Fallback WiFi Transmit
 void wifitransmit_data() {
+  Serial.print("Connect to WiFi and open: http://"); 
+  Serial.print(WiFi.softAPIP());
 
+  unsigned long start = millis(); 
+  while (millis() - start < 30000) {
+    if (client) {
+      Serial.println("Client connected"); 
+      String request = ""; 
+      while (client.connected()) {
+        if (client.available()) {
+          char c = client.read(); 
+          request += c; 
+          if (request.endsWith("\r\n\r\n")) break; 
+        }
+      }
+
+      if (request.indexOf("GET /download") >= 0) {
+        File file = LittleFS.open(LOG_FILE, "r"); 
+        if (file) {
+          client.println("HTTP/1.1 200 OK");
+          client.println("Content-Type: text/csv");
+          client.println("Content-Disposition: attachment; filename=\"nanofloat_log.csv\"");
+          client.println();
+
+          while (file.available()) {
+            client.write(file.read());
+          }
+          file.close();
+          Serial.println("Log file sent to client");
+        } else {
+          client.println("HTTP/1.1 404 Not Found");
+          client.println("Content-Type: text/plain");
+          client.println();
+          client.println("Log file not found.");
+        }
+        client.stop(); 
+      }
+    }
+  }
+  Serial.println("WiFi transfer window closed"); 
 }
 
 // //================================================================================================================================================
