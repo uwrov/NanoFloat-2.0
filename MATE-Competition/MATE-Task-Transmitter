@@ -391,14 +391,16 @@ void radiotransmit_data() {
 // //================================================================================================================================================
 // //                                                        Fallback WiFi Transmit
 void wifitransmit_data() {
-  Serial.print("Connect to WiFi and open: http://"); 
+  Serial.print("Connect to WiFi and open: http://192.168.4.1"); 
   Serial.print(WiFi.softAPIP());
 
   unsigned long start = millis(); 
-  while (millis() - start < 30000) {
+  while (millis() - start < 300000) {
+    WiFiClient client = server.available();
     if (client) {
       Serial.println("Client connected"); 
       String request = ""; 
+
       while (client.connected()) {
         if (client.available()) {
           char c = client.read(); 
@@ -408,8 +410,14 @@ void wifitransmit_data() {
       }
 
       if (request.indexOf("GET /download") >= 0) {
-        File file = LittleFS.open(LOG_FILE, "r"); 
-        if (file) {
+        File file = LittleFS.open(LOG_FILE); 
+        if (!file || file.isDirectory()) {
+          Serial.println("Failed to open file for reading"); 
+          client.println("HTTP/1.1 404 Not Found");
+          client.println("Content-Type: text/plain");
+          client.println();
+          client.println("Log file not found.");
+        } else {
           client.println("HTTP/1.1 200 OK");
           client.println("Content-Type: text/csv");
           client.println("Content-Disposition: attachment; filename=\"nanofloat_log.csv\"");
@@ -420,14 +428,20 @@ void wifitransmit_data() {
           }
           file.close();
           Serial.println("Log file sent to client");
-        } else {
-          client.println("HTTP/1.1 404 Not Found");
-          client.println("Content-Type: text/plain");
-          client.println();
-          client.println("Log file not found.");
         }
-        client.stop(); 
+      } else {
+        client.println("HTTP/1.1 200 OK");
+        client.println("Content-type:text/html");
+        client.println();
+        client.println("<!DOCTYPE html><html><head><title>NanoFloat</title>");
+        client.println("<style>body{font-family:monospace;background:#0b1628;color:#dbeafe;padding:30px;}");
+        client.println("h1{color:#2dd4bf;}a{color:#67e8f9;font-size:1.2em;}</style></head><body>");
+        client.println("<h1>NanoFloat 2.0 — Data Download</h1>");
+        client.println("<a href='/download'>Download Mission Log (CSV)</a>");
+        client.println("</body></html>");
       }
+      client.stop(); 
+      Serial.println("Client disconnected");
     }
   }
   Serial.println("WiFi transfer window closed"); 
