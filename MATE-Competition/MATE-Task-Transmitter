@@ -17,15 +17,15 @@
 //                                                              Pin Definitions (XIAO ESP32-C6 & MCP23017)
 
 // Direct GPIO pin assignments
-const int PIN_ENCODER_A   = D0;   // Encoder A phase
-const int PIN_ENCODER_B   = D1;   // Encoder B phase
-const int PIN_RF95_CS     = D2;   // RFM95 CS
-const int PIN_RF95_G0     = D3;   // RFM95 Interrupt
-const int PIN_RF95_RST     = D6;  // RFM95 Reset
-const int PIN_LIMIT_SW    = D7;   // Limit Switch Input 
-const int PIN_RF95_SCK    = D8;   // RFM95 Clock
-const int PIN_RF95_MISO    = D9;  // RFM95 Serial Out 
-const int PIN_RF95_MOSI = D10;    // RFM95 Serial In 
+const int PIN_ENCODER_A   = D0;  // Encoder A phase
+const int PIN_ENCODER_B   = D1;  // Encoder B phase
+const int PIN_RF95_CS     = D2;  // RFM95 CS
+const int PIN_RF95_G0     = D3;  // RFM95 Interrupt
+const int PIN_RF95_RST    = D6;  // RFM95 Reset
+const int PIN_LIMIT_SW    = D7;  // Limit Switch Input 
+const int PIN_RF95_SCK    = D8;  // RFM95 Clock
+const int PIN_RF95_MISO   = D9;  // RFM95 Serial Out 
+const int PIN_RF95_MOSI   = D10; // RFM95 Serial In 
 
 //MCP23017 pin assignments
 const int MCP_ADDR = 0x20; // I2C Address
