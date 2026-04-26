@@ -17,15 +17,15 @@
 //                                                              Pin Definitions (XIAO ESP32-C6 & MCP23017)
 
 // Direct GPIO pin assignments
-const int PIN_ENCODER_A   = D0;  // Encoder A phase
-const int PIN_ENCODER_B   = D1;  // Encoder B phase
-const int PIN_RF95_CS     = D2;  // RFM95 CS
-const int PIN_RF95_G0     = D3;  // RFM95 Interrupt
-const int PIN_RF95_RST    = D6;  // RFM95 Reset
-const int PIN_LIMIT_SW    = D7;  // Limit Switch Input 
-const int PIN_RF95_SCK    = D8;  // RFM95 Clock
-const int PIN_RF95_MISO   = D9;  // RFM95 Serial Out 
-const int PIN_RF95_MOSI   = D10; // RFM95 Serial In 
+const int PIN_ENCODER_A   = D0;   // Encoder A phase
+const int PIN_ENCODER_B   = D1;   // Encoder B phase
+const int PIN_RF95_CS     = D2;   // RFM95 CS
+const int PIN_RF95_G0     = D3;   // RFM95 Interrupt
+const int PIN_RF95_RST     = D6;  // RFM95 Reset
+const int PIN_LIMIT_SW    = D7;   // Limit Switch Input 
+const int PIN_RF95_SCK    = D8;   // RFM95 Clock
+const int PIN_RF95_MISO    = D9;  // RFM95 Serial Out 
+const int PIN_RF95_MOSI = D10;    // RFM95 Serial In 
 
 //MCP23017 pin assignments
 const int MCP_ADDR = 0x20; // I2C Address
@@ -70,10 +70,11 @@ const long GMT_OFFSET = -28800;
 const int DAYLIGHT_OFFSET = 3600; 
 
 // LittleFS log file 
-const char* LOG_FILE = "/nanofloat_datalog.csv"; 
+const char* LOG_FILE = "/NanoFloat_datalog.csv"; 
 
 // Define RFM95 frequency
 #define RF95_FREQ 900.0
+#define TX_INTERVAL 5000
 
 #define FORMAT_LITTLEFS_IF_FAILED true; 
 
@@ -100,6 +101,8 @@ void initialize_radio();
 void initialize_mcp(); 
 void writeFile(fs::FS &fs, const char* path, const char* message);
 void appendFile(fs::FS &fs, const char* path, const char* message);
+void motor_test();
+void encoder_test();
 
 //================================================================================================================================================
 //                                                              LittleFS Helpers
@@ -182,7 +185,7 @@ void setup() {
   }
 
   pressureSensor.setModel(MS5837::MS5837_30BA);  // Bar30 explicit model set
-  pressureSensor.setFluidDensity(997);           // Freshwater (use 1029 for seawater)
+  pressureSensor.setFluidDensity(997);            // Freshwater (use 1029 for seawater)
   Serial.println("Pressure sensor initialized!");
 
   // LittleFS
@@ -235,7 +238,7 @@ void setup() {
 }
 
 // //================================================================================================================================================ 
-// //                                                                  MCP23017 Init
+// //                                                                  Initialize MCP23017 
 void initialize_mcp() {
   if (!mcp.begin_I2C(MCP_ADDR)) {
     Serial.println("ERROR: MCP23017 not found."); 
@@ -247,11 +250,11 @@ void initialize_mcp() {
   Serial.println("MCP23017 initialized!"); 
 }
 // //================================================================================================================================================
-// //                                                              RFM95 Radio Functions
+// //                                                              Initialize RFM9x Radio 
 
 void initialize_radio() {
   digitalWrite(PIN_RF95_RST, HIGH);
-  Serial.println("\nInitializing Nanofloat Radio...");
+  Serial.println("\nInitializing NanoFloat Radio...");
 
   digitalWrite(PIN_RF95_RST, LOW);
   delay(10);
@@ -259,11 +262,11 @@ void initialize_radio() {
   delay(10);
 
   while (!rf95.init()) {
-    Serial.println("Nanofloat radio init failed");
+    Serial.println("NanoFloat radio init failed");
     radioAvailable = false;
     return;
   }
-  Serial.println("Nanofloat radio init OK!");
+  Serial.println("NanoFloat radio init OK!");
 
   if(!rf95.setFrequency(RF95_FREQ)) {
     Serial.println("setFrequency failed");
@@ -276,7 +279,7 @@ void initialize_radio() {
 
   rf95.setTxPower(23, false);
   radioAvailable = true;
-  Serial.println("Nanofloat radio init OK!");
+  Serial.println("NanoFloat radio init OK!");
 }
 
 // //================================================================================================================================================
@@ -323,7 +326,7 @@ void piston_stop() {
 }
 
 // //================================================================================================================================================
-// //                                                                ENCODER ISR
+// //                                                                Encoder ISR
 void IRAM_ATTR encoder_isr() {
   if (digitalRead(PIN_ENCODER_A) > digitalRead(PIN_ENCODER_B)) {
     encoder_delta++; 
@@ -382,9 +385,56 @@ void save_data(float depth, float pressure) {
 }
 
 // //================================================================================================================================================
-// //                                                           Radio Transmit
-void radiotransmit_data() {
+// //                                                           RFM9x Radio Transmit
 
+void radiotransmit_data() {
+  static unsigned long lastTX = 0;
+  if (millis() - lastTx < TX_INTERVAL) return;
+  lastTx = millis();
+
+  if (!radioAvailable) {
+    Serial.println("NanoFloat radio not available");
+    return;
+  }
+
+  //Open log file from flash 
+  File file = LittleFS.open(LOG_FILE, FILE_READ);
+  if (!file || file.isDirectory()) {
+    Serial.println("Failed to open log file");
+    return;
+  }
+
+  Serial.println("NanoFloat transmitting log over radio...");
+  static unsigned int packetnum = 0;
+
+  // Skip the header line
+  if (file.available()) {
+    file.readStringUntil('\n');
+  }
+
+  // Transmit each data line as a separate packet
+  while (file.available()) {
+    String line = file.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) continue;
+
+    // Append a sequence number so the receiver can detect gaps
+    String radioPacket = line + " | #" + String(packetnum++);
+
+    char packetBuf[120];
+    radioPacket.toCharArray(packetBuf, sizeof(packetBuf));
+
+    Serial.print("Sending packet: ");
+    Serial.println(packetBuf);
+
+    delay(10);
+    rf95.send((uint8_t *)packetBuf, strlen(packetBuf));
+    rf95.waitPacketSent();
+    delay(50); // brief gap between packets to avoid collisions
+  }
+
+  file.close();
+  Serial.println("NanoFloat radio transmission complete");
 }
 
 // //================================================================================================================================================
@@ -419,7 +469,7 @@ void wifitransmit_data() {
         } else {
           client.println("HTTP/1.1 200 OK");
           client.println("Content-Type: text/csv");
-          client.println("Content-Disposition: attachment; filename=\"nanofloat_log.csv\"");
+          client.println("Content-Disposition: attachment; filename=\"NanoFloat_log.csv\"");
           client.println();
 
           while (file.available()) {
@@ -500,12 +550,13 @@ bool move_to_depth(float target_depth_m) {
 // //                                                              Hold Depth
 bool hold_depth(float target_depth_m, unsigned long duration_ms, int readings) {
 
+
 }
 
 // //================================================================================================================================================
 // //                                                                Surface
 bool surface() {
-  Serial.println(Surfacing...)
+  Serial.println(Surfacing...);
   move_to_depth(0.0); 
 }
 
@@ -513,56 +564,7 @@ bool surface() {
 // //                                                              Main Loop
 
 void loop() {
-  // Handle wifi connections
-  WiFiClient client = server.available();
-
-  if (client) {
-    Serial.println("New web client connected.");
-    String currentLine = "";
-
-    while (client.connected()) {
-      if (client.available()) {
-        char c = client.read();
-        if (c == '\n') {
-          if (currentLine.length() == 0) {
-            // Send HTTP response
-            client.println("HTTP/1.1 200 OK");
-            client.println("Content-type:text/html");
-            client.println();
-
-            // HTML page with auto-refresh every 2 seconds
-            client.println("<!DOCTYPE html><html>");
-            client.println("<head>");
-            client.println("<meta http-equiv='refresh' content='2'>");
-            client.println("<title>NanoFloat Monitor</title>");
-            client.println("<style>");
-            client.println("body { font-family: monospace; background: #0b1628; color: #dbeafe; padding: 30px; }");
-            client.println("h1 { color: #2dd4bf; } .card { background: #1e3a5f; padding: 15px; margin: 10px 0; border-radius: 8px; }");
-            client.println(".val { font-size: 1.5em; color: #67e8f9; font-weight: bold; }");
-            client.println("</style></head><body>");
-            client.println("<h1>NanoFloat 1.2 — Live Monitor</h1>");
-
-            client.println("<div class='card'><p>Depth</p><p class='val'>" + String(current_depth, 2) + " m</p></div>");
-            client.println("<div class='card'><p>Temperature</p><p class='val'>" + String(pressureSensor.temperature(), 1) + " °C</p></div>");
-            client.println("<div class='card'><p>Pressure</p><p class='val'>" + String(pressureSensor.pressure(), 2) + " mbar</p></div>");
-            client.println("<div class='card'><p>Encoder Count</p><p class='val'>" + String(encoder_count) + "</p></div>");
-            client.println("<div class='card'><p>Mission Status</p><p class='val'>" + String(mission_complete ? "COMPLETE" : "IN PROGRESS") + "</p></div>");
-
-            client.println("</body></html>");
-            client.println();
-            break;
-          } else {
-            currentLine = "";
-          }
-        } else if (c != '\r') {
-          currentLine += c;
-        }
-      }
-    }
-
-    client.stop();
-    Serial.println("Web client disconnected.");
-  }
+  
   // Auto-start competition mission after 10 seconds
   static bool mission_started = false;
   if (millis() > 10000 && !mission_started && !mission_complete) {
@@ -570,39 +572,12 @@ void loop() {
     competition_mission();
   }
 
-  // Continuously monitor depth
-  static unsigned long lastRead = 0;
-  if (millis() - lastRead > 1000) {
-    current_depth = read_depth();
-
-    // Transmit data via radio
-    if (current_depth < 0.5) {
-      transmitRadioData();
-    }
-
-    if (!radioAvailable) {
-      Serial.println("Depth:" + String(current_depth, 2) + " (radio unavailable, switching to Wifi)");
-    }
-
-    Serial.println("Depth: ");
-    Serial.print(String(current_depth, 2));
-    Serial.print(" m | Temp: ");
-    Serial.print(String(pressureSensor.temperature(), 1));
-    Serial.print(" C | Pressure: ");
-    Serial.print(String(pressureSensor.pressure(), 2));
-    Serial.print(" mbar | Encoder: ");
-    Serial.print(String(encoder_count));
-
-    save_depth();
-    lastRead = millis();
-  }
-
+  // Keep monitoring limit switch at all times
   if (digitalRead(PIN_LIMIT_SW) == HIGH) {
     piston_stop();
-    Serial.println("WARNING! Limit switch has been switch off.");
+    Serial.println("WARNING! Limit switch has been triggered.");
   }
 
-  delay(10);
 }
 
 // //================================================================================================================================================
@@ -750,3 +725,9 @@ void motor_test() {
     }
 }
 
+//================================================================================================================================================
+//                                                                Encoder Test
+
+void encoder_test() {
+
+}
