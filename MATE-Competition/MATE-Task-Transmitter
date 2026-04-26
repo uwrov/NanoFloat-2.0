@@ -450,7 +450,51 @@ void wifitransmit_data() {
 // //================================================================================================================================================
 // //                                                               Move to Depth
 bool move_to_depth(float target_depth_m) {
+  Serial.print("Moving to target depth: ");
+  Serial.print(target_depth_m); 
+  
+  if (target_depth_m < MIN_DEPTH || target_depth_m > MAX_DEPTH) {
+    Serial.println(" m (out of bounds)");
+    return false;
+  }
 
+  unsigned long start_time = millis();
+
+  while (true) {
+    float depth, pressure; 
+    read_sensor(depth, pressure);
+    current_depth = depth; 
+
+    Serial.print("Depth: "); 
+    Serial.print(depth, 2); 
+    Serial.println(" m"); 
+  }
+
+  if (abs(depth - target_depth_m) <= depth_tolerance) {
+    piston_stop(); 
+    Serial.print("Target depth reached: "); 
+    Serial.print(depth, 2);
+    Serial.println(" m");
+    return true;
+  }
+
+  if (millis() - start_time > MAX_MOTOR_TIME) {
+    piston_stop(); 
+    Serial.println("Failed to reach target depth within time limit");
+    return false;
+  }
+
+   if (digitalRead(PIN_LIMIT_SW) == HIGH) {
+    piston_stop(); 
+    Serial.println("Limit switch triggered!"); 
+    return false; 
+   }
+
+    if (depth < target_depth_m) {
+      piston_out(); 
+    } else {
+      piston_in(); 
+    }
 }
 
 // //================================================================================================================================================
