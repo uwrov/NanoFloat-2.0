@@ -286,26 +286,28 @@ void initialize_radio() {
 // //                                                              Time Sync
 bool sync_time() {
   Serial.println("\nSyncing time using NTP..."); 
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD); 
-}
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  
+  configTime(GMT_OFFSET, DAYLIGHT_OFFSET, NTP_SERVER); 
 
-configTime(GMT_OFFSET, DAYLIGHT_OFFSET, NTP_SERVER); 
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    Serial.println("WARNING: Failed to obtain time."); 
+    WiFi.disconnect(true); 
+    WiFi.mode(WIFI_OFF); 
+    return false; 
+  }
 
-struct tm timeinfo;
-if (!getLocalTime(&timeinfo)) {
-  Serial.println("WARNING: Failed to obtain time."); 
+  Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S"); 
+
   WiFi.disconnect(true); 
   WiFi.mode(WIFI_OFF); 
-  return false; 
+
+  Serial.println("Time has been synced. WiFi disconnected."); 
+  return true;
 }
 
-Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S"); 
-
-WiFi.disconnect(true); 
-WiFi.mode(WIFI_OFF); 
-
-Serial.println("Time has been synced. WiFi disconnected."); 
-return true; 
+ 
 
 // //================================================================================================================================================
 // //                                                              Piston Control Functions
