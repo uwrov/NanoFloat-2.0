@@ -87,7 +87,6 @@ void IRAM_ATTR encoder_isr();
 bool sync_time(); 
 void save_position(); 
 void position_reset(); 
-bool piston_move(int steps, bool absolute); 
 void read_sensor(float &depth, float &pressure); 
 void save_data(float depth, float pressure); 
 void radiotransmit_data(); 
@@ -183,7 +182,7 @@ void setup() {
   }
 
   pressureSensor.setModel(MS5837::MS5837_30BA);  // Bar30 explicit model set
-  pressureSensor.setFluidDensity(997);            // Freshwater (use 1029 for seawater)
+  pressureSensor.setFluidDensity(997);           // Freshwater (use 1029 for seawater)
   Serial.println("Pressure sensor initialized!");
 
   // LittleFS
