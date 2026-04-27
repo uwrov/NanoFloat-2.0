@@ -21,6 +21,7 @@ const char* WIFI_PASSWORD = "fernano";
 #define ENCODER_COUNT_2_5M  -1    
 
 // The magnitude of each encoder step
-#define ENCODER_TEST_STEP  50  
+#define ENCODER_TEST_STEP  50 
+#define ENCODER_CORRECTION_STEP 10 
 
 #endif

@@ -525,18 +525,12 @@ void wifitransmit_data() {
 // //================================================================================================================================================
 // //                                                               Move to Depth
 bool move_to_depth(float target_depth_m) {
-  Serial.print("Moving to target depth: ");
-  Serial.print(target_depth_m, 2);
-  Serial.println(" m");
-
   if (target_depth_m < MIN_DEPTH || target_depth_m > MAX_DEPTH) {
-    Serial.println("Target out of bounds - aborting.");
     return false;
   }
 
   // Look up the calibrated encoder count for this target using 
   long target_count = depth_to_encoder(target_depth_m);
-  Serial.print("Target encoder count: ");
   Serial.println(target_count);
 
   unsigned long start_time = millis();
@@ -557,7 +551,6 @@ bool move_to_depth(float target_depth_m) {
     // Safety: limit switch
     if (digitalRead(PIN_LIMIT_SW) == HIGH) {
       piston_stop();
-      Serial.println("Limit switch triggered - aborting.");
       save_position();
       return false;
     }
@@ -565,7 +558,6 @@ bool move_to_depth(float target_depth_m) {
     //Safety: timeout
     if (millis() - start_time > MAX_MOTOR_TIME) {
       piston_stop();
-      Serial.println("Timeout - aborting.");
       save_position();
       return false;
     }
@@ -573,9 +565,6 @@ bool move_to_depth(float target_depth_m) {
     // Primary stop: sensor confirms target depth
     if (abs(depth - target_depth_m) <= sensordepth_tolerance) {
       piston_stop();
-      Serial.print("Target depth confirmed by sensor: ");
-      Serial.print(depth, 3);
-      Serial.println(" m");
       save_position();
       return true;
     }
@@ -584,12 +573,6 @@ bool move_to_depth(float target_depth_m) {
     // If sensor is lagging or noisy, stop here and let 
     if (abs(piston_position - target_count) <= ENCODER_TOLERANCE) {
       piston_stop();
-      Serial.print("Encoder target reached at count: ");
-      Serial.println(piston_position);
-      Serial.print("Sensor depth at stop: ");
-      Serial.print(depth, 3);
-      Serial.println(" m");
-      save_position();
       return true;
     }
 
@@ -606,8 +589,53 @@ bool move_to_depth(float target_depth_m) {
 // //================================================================================================================================================
 // //                                                                 Hold Depth
 bool hold_depth(float target_depth_m, unsigned long duration_ms, int readings) {
+  Serial.print("Holding depth: ");
+  Serial.print(target_depth_m, 2);
+  Serial.print(" m for ");
+  Serial.print(duration_ms / 1000);
+  Serial.println(" seconds");
 
+  unsigned long start_time = millis();
+  float depth, pressure;
+  unsigned long read_interval = duration_ms / readings;
+  unsigned long last_read_time = 0;
+  int read_count = 0;
 
+  while (millis() - start_time < duration_ms) {
+    noInterrupts(); 
+    piston_position += encoder_delta;
+    encoder_delta = 0;
+    interrupts();
+ 
+    read_sensor(depth, pressure);
+    current_depth = depth;
+
+    if (digitalRead(PIN_LIMIT_SW) == HIGH) {
+      piston_stop();
+      save_position();
+      return false;
+    }
+
+    if (depth < (target_depth_m - sensordepth_tolerance)) {
+      piston_move(ENCODER_CORRECTION_STEP, false);
+    } else if (depth > (target_depth_m + sensordepth_tolerance)) {
+      piston_move(-ENCODER_CORRECTION_STEP, false);
+    } 
+
+    if (millis() - last_read_time >= read_interval && read_count < readings) {
+      save_data(depth, pressure);
+      read_count++; 
+      last_read_time = millis();
+    }
+
+    delay(500); 
+
+  }
+
+  piston_stop();
+  Serial.println("Hold complete.");
+  save_position();
+  return true;
 }
 
 // //================================================================================================================================================
