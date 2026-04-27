@@ -282,14 +282,14 @@ void initialize_radio() {
 
   while (!rf95.init()) {
     Serial.println("NanoFloat radio init failed");
-    radioAvailable = false;
+    radio_available = false;
     return;
   }
   Serial.println("NanoFloat radio init OK!");
 
   if(!rf95.setFrequency(RF95_FREQ)) {
     Serial.println("setFrequency failed");
-    radioAvailable = false;
+    radio_available = false;
     return;
   }
 
@@ -297,7 +297,7 @@ void initialize_radio() {
   Serial.println(RF95_FREQ);
 
   rf95.setTxPower(23, false);
-  radioAvailable = true;
+  radio_available = true;
   Serial.println("NanoFloat radio initialized!");
 }
 
@@ -423,7 +423,7 @@ void radiotransmit_data() {
   }
 
   // Open log file from flash 
-  File file = LittleFS.open(LOG_FILE, FILE_READ);
+  File file = LittleFS.open(LOG_FILE);
   if (!file || file.isDirectory()) {
     Serial.println("Failed to open log file");
     return;
@@ -613,7 +613,7 @@ bool hold_depth(float target_depth_m, unsigned long duration_ms, int readings) {
 // //                                                                Surface
 bool surface() {
   Serial.println("Surfacing...");
-  move_to_depth(0.0);
+  return move_to_depth(0.0);
 }
 
 // //================================================================================================================================================
