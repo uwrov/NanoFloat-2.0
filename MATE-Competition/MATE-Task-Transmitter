@@ -112,11 +112,12 @@ bool run_step(bool extend, float &depth, float &pressure);
 
 long depth_to_encoder(float depth) {
   // Direct lookup for the three competition targets
-  // Re-run encoder_test() in representative water to get accurate counts
-  if (depth_m <= 0.1f)  return ENCODER_COUNT_0_1M;
-  if (depth_m <= 0.4f)  return ENCODER_COUNT_0_4M;
-  if (depth_m <= 2.5f)  return ENCODER_COUNT_2_5M;
-  return ENCODER_COUNT_2_5M;
+  if (depth_m <= 0.4f){
+    return ENCODER_COUNT_0_4M;
+  }
+  if (depth_m <= 2.5f) {
+    return ENCODER_COUNT_2_5M;
+  }
 }
 
 //================================================================================================================================================
@@ -520,11 +521,11 @@ bool move_to_depth(float target_depth_m) {
   Serial.println(" m");
 
   if (target_depth_m < MIN_DEPTH || target_depth_m > MAX_DEPTH) {
-    Serial.println("Target out of bounds — aborting.");
+    Serial.println("Target out of bounds - aborting.");
     return false;
   }
 
-  // Look up the calibrated encoder count for this target
+  // Look up the calibrated encoder count for this target using 
   long target_count = depth_to_encoder(target_depth_m);
   Serial.print("Target encoder count: ");
   Serial.println(target_count);
@@ -547,7 +548,7 @@ bool move_to_depth(float target_depth_m) {
     // Safety: limit switch
     if (digitalRead(PIN_LIMIT_SW) == HIGH) {
       piston_stop();
-      Serial.println("Limit switch triggered — aborting.");
+      Serial.println("Limit switch triggered - aborting.");
       save_position();
       return false;
     }
@@ -555,7 +556,7 @@ bool move_to_depth(float target_depth_m) {
     //Safety: timeout
     if (millis() - start_time > MAX_MOTOR_TIME) {
       piston_stop();
-      Serial.println("Timeout — aborting.");
+      Serial.println("Timeout - aborting.");
       save_position();
       return false;
     }
