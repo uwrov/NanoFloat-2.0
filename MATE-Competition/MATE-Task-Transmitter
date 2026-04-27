@@ -76,7 +76,7 @@ const char* LOG_FILE = "/NanoFloat_datalog.csv";
 #define RF95_FREQ 900.0
 #define TX_INTERVAL 5000
 
-#define FORMAT_LITTLEFS_IF_FAILED true; 
+#define FORMAT_LITTLEFS_IF_FAILED true
 
 
 //================================================================================================================================================
@@ -110,7 +110,7 @@ bool run_step(bool extend, float &depth, float &pressure);
 //================================================================================================================================================
 //                                                              Depth and Encoder Mapped Counts
 
-long depth_to_encoder(float depth) {
+long depth_to_encoder(float depth_m) {
   // Direct lookup for the three competition targets
   if (depth_m <= 0.4f){
     return ENCODER_COUNT_0_4M;
@@ -182,9 +182,11 @@ void setup() {
   // EEPROM Set-Up
   EEPROM.begin(EEPROM_SIZE); 
   EEPROM.get(EEPROM_POSITION_ADDR, piston_position); 
-  if (piston_position) < 0 piston_position = 0; 
+  if (piston_position < 0) {
+    piston_position = 0;
+  }
   Serial.print("Restored piston position: "); 
-  Serial.println(pistion_position); 
+  Serial.println(piston_position); 
 
   // Initialize pressure sensor
   Serial.println("\nInitializing MS5837 pressure sensor...");
@@ -227,6 +229,7 @@ void setup() {
   IPAddress IP = WiFi.softAPIP();
   Serial.print("AP IP address: ");
   Serial.println(IP);
+  server.begin();
   Serial.println("\nAP configured successfully!");
 
 
@@ -295,7 +298,7 @@ void initialize_radio() {
 
   rf95.setTxPower(23, false);
   radioAvailable = true;
-  Serial.println("NanoFloat radio init OK!");
+  Serial.println("NanoFloat radio initialized!");
 }
 
 // //================================================================================================================================================
@@ -373,8 +376,13 @@ void read_sensor(float &depth, float &pressure) {
   depth = pressureSensor.depth(); 
   pressure = pressureSensor.pressure() * 0.1; // mbar to kPA
 
-  if (depth < 0) depth = 0; 
-  if (depth > MAX_DEPTH) depth = MAX_DEPTH; 
+  if (depth < 0) {
+    depth = 0; 
+  }
+
+  if (depth > MAX_DEPTH) {
+    depth = MAX_DEPTH; 
+  }
 }
 
 // //================================================================================================================================================
@@ -385,7 +393,7 @@ void save_data(float depth, float pressure) {
 
   if (getLocalTime(&timeinfo)) {
     char buf[30]; 
-    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", time&info); 
+    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &timeinfo); 
     timestamp = String(buf); 
   } else {
     timestamp = String(millis()); 
@@ -406,10 +414,10 @@ void save_data(float depth, float pressure) {
 
 void radiotransmit_data() {
   static unsigned long lastTX = 0;
-  if (millis() - lastTx < TX_INTERVAL) return;
-  lastTx = millis();
+  if (millis() - lastTX < TX_INTERVAL) return;
+  lastTX = millis();
 
-  if (!radioAvailable) {
+  if (!radio_available) {
     Serial.println("NanoFloat radio not available");
     return;
   }
@@ -457,8 +465,8 @@ void radiotransmit_data() {
 // //================================================================================================================================================
 // //                                                        Fallback WiFi Transmit
 void wifitransmit_data() {
-  Serial.print("Connect to WiFi and open: http://192.168.4.1"); 
-  Serial.print(WiFi.softAPIP());
+  Serial.print("Connect to WiFi and open: "); 
+  Serial.println(WiFi.softAPIP());
 
   unsigned long start = millis(); 
   while (millis() - start < 300000) {
