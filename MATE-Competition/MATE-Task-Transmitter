@@ -399,7 +399,7 @@ void radiotransmit_data() {
     return;
   }
 
-  //Open log file from flash 
+  // Open log file from flash 
   File file = LittleFS.open(LOG_FILE, FILE_READ);
   if (!file || file.isDirectory()) {
     Serial.println("Failed to open log file");
