@@ -42,8 +42,8 @@ int piston_position = 0;
 
 // Depth control parameters
 float current_depth = 0.0;
-float target_depth = 0.0;
-float depth_tolerance = 0.2;
+float target_depth_m = 0.0;
+float sensordepth_tolerance = 0.2;
 const float MAX_DEPTH = 30.0;
 const float MIN_DEPTH = 0.0;
 
@@ -58,7 +58,7 @@ bool radio_available = false;
 MS5837 pressureSensor;
 Adafruit_MCP23X17 mcp;  
 WiFiServer server(80);
-RH_RF95 rf95(PIN_RF95_CS, PIN_RF95_INT);
+RH_RF95 rf95(PIN_RF95_CS, PIN_RF95_G0);
 
 // EEPROM
 const int EEPROM_SIZE= 512; 
@@ -78,9 +78,11 @@ const char* LOG_FILE = "/NanoFloat_datalog.csv";
 
 #define FORMAT_LITTLEFS_IF_FAILED true; 
 
+
 //================================================================================================================================================
 //                                                              Function Prototypes
 
+long depth_to_encoder(float depth_m);
 void piston_out();
 void piston_in();
 void piston_stop();
@@ -103,6 +105,19 @@ void writeFile(fs::FS &fs, const char* path, const char* message);
 void appendFile(fs::FS &fs, const char* path, const char* message);
 void motor_test();
 void encoder_test();
+bool run_step(bool extend, float &depth, float &pressure);
+
+//================================================================================================================================================
+//                                                              Depth and Encoder Mapped Counts
+
+long depth_to_encoder(float depth) {
+  // Direct lookup for the three competition targets
+  // Re-run encoder_test() in representative water to get accurate counts
+  if (depth_m <= 0.1f)  return ENCODER_COUNT_0_1M;
+  if (depth_m <= 0.4f)  return ENCODER_COUNT_0_4M;
+  if (depth_m <= 2.5f)  return ENCODER_COUNT_2_5M;
+  return ENCODER_COUNT_2_5M;
+}
 
 //================================================================================================================================================
 //                                                              LittleFS Helpers
@@ -313,18 +328,18 @@ bool sync_time() {
 // //                                                              Piston Control Functions
 
 void piston_out() {
-  digitalWrite(PIN_MOTOR_1, HIGH);
-  digitalWrite(PIN_MOTOR_2, LOW);
+  mcp.digitalWrite(PIN_MOTOR_1, HIGH);
+  mcp.digitalWrite(PIN_MOTOR_2, LOW);
 }
 
 void piston_in() {
-  digitalWrite(PIN_MOTOR_1, LOW);
-  digitalWrite(PIN_MOTOR_2, HIGH);
+  mcp.digitalWrite(PIN_MOTOR_1, LOW);
+  mcp.digitalWrite(PIN_MOTOR_2, HIGH);
 }
 
 void piston_stop() {
-  digitalWrite(PIN_MOTOR_1, LOW);
-  digitalWrite(PIN_MOTOR_2, LOW);
+  mcp.digitalWrite(PIN_MOTOR_1, LOW);
+  mcp.digitalWrite(PIN_MOTOR_2, LOW);
 }
 
 // //================================================================================================================================================
@@ -336,7 +351,6 @@ void IRAM_ATTR encoder_isr() {
     encoder_delta--; 
   }
 }
-
 // //================================================================================================================================================
 // //                                                              Save / Reset Position
 
@@ -502,64 +516,95 @@ void wifitransmit_data() {
 // //                                                               Move to Depth
 bool move_to_depth(float target_depth_m) {
   Serial.print("Moving to target depth: ");
-  Serial.print(target_depth_m); 
-  
+  Serial.print(target_depth_m, 2);
+  Serial.println(" m");
+
   if (target_depth_m < MIN_DEPTH || target_depth_m > MAX_DEPTH) {
-    Serial.println(" m (out of bounds)");
+    Serial.println("Target out of bounds — aborting.");
     return false;
   }
+
+  // Look up the calibrated encoder count for this target
+  long target_count = depth_to_encoder(target_depth_m);
+  Serial.print("Target encoder count: ");
+  Serial.println(target_count);
 
   unsigned long start_time = millis();
+  float depth, pressure;
 
   while (true) {
-    float depth, pressure; 
+
+    //Accumulate encoder ticks
+    noInterrupts();
+    piston_position += encoder_delta;
+    interrupts();
+    encoder_delta = 0;
+
+    //Read sensor
     read_sensor(depth, pressure);
-    current_depth = depth; 
+    current_depth = depth;
 
-    Serial.print("Depth: "); 
-    Serial.print(depth, 2); 
-    Serial.println(" m"); 
-  }
-
-  if (abs(depth - target_depth_m) <= depth_tolerance) {
-    piston_stop(); 
-    Serial.print("Target depth reached: "); 
-    Serial.print(depth, 2);
-    Serial.println(" m");
-    return true;
-  }
-
-  if (millis() - start_time > MAX_MOTOR_TIME) {
-    piston_stop(); 
-    Serial.println("Failed to reach target depth within time limit");
-    return false;
-  }
-
-   if (digitalRead(PIN_LIMIT_SW) == HIGH) {
-    piston_stop(); 
-    Serial.println("Limit switch triggered!"); 
-    return false; 
-   }
-
-    if (depth < target_depth_m) {
-      piston_out(); 
-    } else {
-      piston_in(); 
+    // Safety: limit switch
+    if (digitalRead(PIN_LIMIT_SW) == HIGH) {
+      piston_stop();
+      Serial.println("Limit switch triggered — aborting.");
+      save_position();
+      return false;
     }
+
+    //Safety: timeout
+    if (millis() - start_time > MAX_MOTOR_TIME) {
+      piston_stop();
+      Serial.println("Timeout — aborting.");
+      save_position();
+      return false;
+    }
+
+    // Primary stop: sensor confirms target depth
+    if (abs(depth - target_depth_m) <= sensordepth_tolerance) {
+      piston_stop();
+      Serial.print("Target depth confirmed by sensor: ");
+      Serial.print(depth, 3);
+      Serial.println(" m");
+      save_position();
+      return true;
+    }
+
+    // Fallback stop: encoder count reaches target
+    // If sensor is lagging or noisy, stop here and let 
+    if (abs(piston_position - target_count) <= ENCODER_TOLERANCE) {
+      piston_stop();
+      Serial.print("Encoder target reached at count: ");
+      Serial.println(piston_position);
+      Serial.print("Sensor depth at stop: ");
+      Serial.print(depth, 3);
+      Serial.println(" m");
+      save_position();
+      return true;
+    }
+
+    // Confirm target_count using piston_position, not sensor depth
+    // Sensor is ground truth for stopping due to possible lag
+    if (piston_position < target_count) {
+      piston_out();
+    } else {
+      piston_in();
+    }
+  }
 }
 
 // //================================================================================================================================================
-// //                                                              Hold Depth
+// //                                                                 Hold Depth
 bool hold_depth(float target_depth_m, unsigned long duration_ms, int readings) {
 
 
 }
 
 // //================================================================================================================================================
-// //                                                                Surface
+// //                                                                Surface (under-ice)
 bool surface() {
-  Serial.println(Surfacing...);
-  move_to_depth(0.0); 
+  Serial.println("Surfacing...");
+  move_to_depth(0.0);
 }
 
 // //================================================================================================================================================
@@ -587,12 +632,12 @@ void loop() {
 
 bool vertical_profile(int profile_num) {
   Serial.println("");
-  Serial.println("╔════════════════════════════════════════════╗");
-  Serial.println("");
-  Serial.print("║       VERTICAL PROFILE ");
+  Serial.println("|--------------------------------------------|");
+  Serial.println("|                                            |");
+  Serial.println("|              VERTICAL PROFILE              |");
+  Serial.println("|                                            |");
+  Serial.println("|--------------------------------------------|");
   Serial.print(String(profile_num));
-  Serial.println("                 ║");
-  Serial.println("╚═════════════════════════════════════════╗");
   Serial.println("");
 
   Serial.println("\n[Phase 1] Diving to 2.5 meters...");
@@ -639,11 +684,11 @@ bool vertical_profile(int profile_num) {
 
 void competition_mission() {
   Serial.println("\n\n");
-  Serial.println("╔════════════════════════════════════════════╗");
-  Serial.println("║                                            ║");
-  Serial.println("║   STARTING COMPETITION MISSION - TASK 4.1  ║");
-  Serial.println("║                                            ║");
-  Serial.println("╚════════════════════════════════════════════╝");
+  Serial.println("|--------------------------------------------|");
+  Serial.println("|                                            |");
+  Serial.println("|   STARTING COMPETITION MISSION - TASK 4.1  |");
+  Serial.println("|                                            |");
+  Serial.println("|--------------------------------------------|");
   Serial.println("");
 
   Serial.println("\n Executing Vertical Profiles");
@@ -670,18 +715,18 @@ void competition_mission() {
   }
 
   Serial.println("\n\n");
-  Serial.println("╔════════════════════════════════════════════╗");
-  Serial.println("║                                            ║");
-  Serial.println("║      COMPETITION MISSION COMPLETE!        ║");
-  Serial.println("║                                            ║");
-  Serial.println("╚════════════════════════════════════════════╝");
+  Serial.println("|--------------------------------------------|");
+  Serial.println("|                                            |");
+  Serial.println("|      COMPETITION MISSION COMPLETE!         |");
+  Serial.println("|                                            |");
+  Serial.println("|--------------------------------------------|");
 
-  Serial.println("\n═══════════ MISSION SUMMARY ═══════════");
+  Serial.println("\n--------- MISSION SUMMARY ------------");
   Serial.print("Vertical Profile 1: ");
   Serial.println(profile1_success ? "SUCCESS" : "FAILED");
   Serial.print("Vertical Profile 2: ");
   Serial.println(profile2_success ? "SUCCESS" : "FAILED");
-  Serial.println("════════════════════════════════════════");
+  Serial.println("-----------------------------------------");
   Serial.println("");
 
   mission_complete = true;
@@ -691,8 +736,8 @@ void competition_mission() {
 //                                                                Motor Test
 
 void motor_test() {
-    digitalWrite(PIN_MOTOR_1, LOW);
-    digitalWrite(PIN_MOTOR_2, LOW);
+    mcp.digitalWrite(PIN_MOTOR_1, LOW);
+    mcp.digitalWrite(PIN_MOTOR_2, LOW);
     
     Serial.println("-------");
     Serial.println("Beginning Motor Test. Input either 1, -1, or 0 to run the motor forwards, backwards, or stop, respectively.");
@@ -704,21 +749,21 @@ void motor_test() {
         String direction = Serial.readStringUntil('\n');
         direction.trim();
         if (direction == "end") {
-          digitalWrite(PIN_MOTOR_1, LOW);
-          digitalWrite(PIN_MOTOR_2, LOW);
+          mcp.digitalWrite(PIN_MOTOR_1, LOW);
+          mcp.digitalWrite(PIN_MOTOR_2, LOW);
           Serial.println("Motor test concluded");
           break;
         } else if (direction == "1") {
-          digitalWrite(PIN_MOTOR_1, HIGH);
-          digitalWrite(PIN_MOTOR_2, LOW);
+          mcp.digitalWrite(PIN_MOTOR_1, HIGH);
+          mcp.digitalWrite(PIN_MOTOR_2, LOW);
           Serial.println("Running motor forwards");
         } else if (direction == "-1") {
-          digitalWrite(PIN_MOTOR_1, LOW);
-          digitalWrite(PIN_MOTOR_2, HIGH);
+          mcp.digitalWrite(PIN_MOTOR_1, LOW);
+          mcp.digitalWrite(PIN_MOTOR_2, HIGH);
           Serial.println("Running motor backwards");
         } else if (direction == "0") {
-          digitalWrite(PIN_MOTOR_1, LOW);
-          digitalWrite(PIN_MOTOR_2, LOW);
+          mcp.digitalWrite(PIN_MOTOR_1, LOW);
+          mcp.digitalWrite(PIN_MOTOR_2, LOW);
           Serial.println("Stopping motor");
         } else {
           Serial.println("Input invalid");
@@ -732,4 +777,177 @@ void motor_test() {
 
 void encoder_test() {
 
+  encoder_delta = 0;
+  piston_position = 0;
+
+  Serial.println("\n|--------------------------------------------|");
+  Serial.println(  "|         ENCODER CALIBRATION TEST           |");
+  Serial.println(  "|--------------------------------------------|");
+  Serial.println("\nPlace the float at the surface before starting.");
+  Serial.println("Press any key to zero the encoder and begin...");
+  while (!Serial.available()) { delay(50); }
+  Serial.read();
+
+  // Zero encoder count at surface
+  noInterrupts();
+  encoder_delta = 0;
+  interrupts();
+  piston_position = 0;
+
+  float depth, pressure;
+  read_sensor(depth, pressure);
+
+  Serial.println("\nEncoder zeroed at surface.");
+  Serial.print("Surface depth reading: ");
+  Serial.print(depth, 3);
+  Serial.println(" m\n");
+  Serial.println("Controls:");
+  Serial.println("--------------------------------------------");
+  Serial.println("  Any key -> extend one step");
+  Serial.println("  'r'     ->  retract one step");
+  Serial.println("  'x'     ->  abort test");
+  Serial.println("Target depth confirmed automatically by sensor.");
+  Serial.println("--------------------------------------------\n");
+
+  int count_0_4m  = -1;
+  int count_2_5m  = -1;
+
+  Serial.println("\n|--------------------------------------------|");
+  Serial.println(  "|    PHASE 1: Extend piston to reach 0.4 m   |");
+  Serial.println(  "|           (Tolerance: +/-0.20m)            |");
+  Serial.println(  "|--------------------------------------------|");
+
+  while (count_0_4m < 0) {
+
+    Serial.println("Press any key to extend one step, 'r' to retract, 'x' to abort.");
+    while (!Serial.available()) { 
+      delay(50); 
+    }
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+
+    if (cmd == "x") { 
+      piston_stop(); 
+      Serial.println("Test aborted."); 
+      return; 
+    }
+
+    bool ok = run_step(cmd != "r", depth, pressure);
+    if (!ok) {
+      return;
+    } 
+
+    // Sensor confirmation — larger +/-0.20m 
+    if (depth >= (0.4f - ENCODER_TOLERANCE) &&
+        depth <= (0.4f + ENCODER_TOLERANCE)) {
+      count_0_4m = piston_position;
+      Serial.println("\n 0.4m TARGET CONFIRMED BY SENSOR");
+      Serial.print("Encoder count: "); Serial.println(count_0_4m);
+      Serial.print("Sensor depth: "); Serial.print(depth, 3);   Serial.println(" m");
+      Serial.print("Pressure: "); Serial.print(pressure, 2); Serial.println(" kPa");
+      Serial.println("Encoders for 0.4m locked. Proceeding to 2.5 m.\n");
+    }
+  }
+
+  Serial.println("\n|--------------------------------------------|");
+  Serial.println(  "|    PHASE 2: Extend piston to reach 2.5 m   |");
+  Serial.println(  "|           (Tolerance: +/-0.20m)            |");
+  Serial.println(  "|--------------------------------------------|");
+
+  while (count_2_5m < 0) {
+
+    Serial.println("Press any key to extend one step, 'r' to retract, 'x' to abort.");
+    while (!Serial.available()) { 
+      delay(50); 
+    }
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+
+    if (cmd == "x") { 
+      piston_stop(); 
+      Serial.println("Test aborted."); 
+      return; 
+    }
+
+    bool ok = run_step(cmd != "r", depth, pressure);
+    if (!ok) return; // limit switch abort
+
+    // Sensor confirmation — +/-0.20m
+    if (depth >= (2.5f - ENCODER_TOLERANCE) &&
+        depth <= (2.5f + ENCODER_TOLERANCE)) {
+      count_2_5m = piston_position;
+      Serial.println("\n 2.5m TARGET CONFIRMED BY SENSOR");
+      Serial.print("Encoder count: "); Serial.println(count_2_5m);
+      Serial.print("Sensor depth: "); Serial.print(depth, 3);   Serial.println(" m");
+      Serial.print("Pressure: "); Serial.print(pressure, 2); Serial.println(" kPa");
+      Serial.println("Encoders for 2.5m locked. Returning to surface.\n");
+    }
+  }
+  Serial.println("\n|--------------------------------------------|");
+  Serial.println(  "|          CALIBRATION SUMMARY               |");
+  Serial.println(  "|--------------------------------------------|");
+  Serial.println("\nCopy these values into config.h:\n");
+  Serial.print("  #define ENCODER_COUNT_0_4M    ");
+  Serial.println(count_0_4m >= 0 ? String(count_0_4m) : "NOT REACHED");
+  Serial.print("  #define ENCODER_COUNT_2_5M    ");
+  Serial.println(count_2_5m >= 0 ? String(count_2_5m) : "NOT REACHED");
+  Serial.println("\nEncoder calibration complete.");
+}
+
+// Helper method for each step: extending piston and confirming depths using sensor readings
+bool run_step(bool extend, float &depth, float &pressure) {
+  if(extend) { 
+    piston_out(); 
+    Serial.println("Extending one step..."); 
+  } else { 
+    piston_in();  
+    Serial.println("Retracting one step..."); 
+  }
+
+  int step_start = piston_position;
+
+  while(abs(piston_position - step_start) < ENCODER_TEST_STEP) {
+    noInterrupts();
+    piston_position += encoder_delta;
+    encoder_delta = 0;
+    interrupts();
+
+    if(digitalRead(PIN_LIMIT_SW) == HIGH) {
+      piston_stop();
+      Serial.println("Limit switch triggered.");
+      return false;
+    }
+  }
+
+  piston_stop();
+
+   // Wait for sensor to stabilize
+  Serial.print("Stabilizing");
+  float reading_a, reading_b, p;
+
+  // Check sensor twice with delay to see if readings differ by more than 0.01m
+  // If unstable, keep looping
+  do {
+    read_sensor(reading_a, p);
+    delay(400);
+    read_sensor(reading_b, p);
+    delay(400);
+    Serial.print(".");
+  } while (abs(reading_a - reading_b) > 0.01f);
+
+  // Save stable values and update final encoder count depth
+  depth = reading_b;
+  pressure = p;
+  Serial.println();
+
+  noInterrupts();
+  piston_position += encoder_delta;
+  encoder_delta = 0;
+  interrupts();
+
+  Serial.print("Encoder count: "); Serial.println(piston_position);
+  Serial.print("Depth: "); Serial.print(depth, 3);  Serial.println(" m");
+  Serial.print("Pressure: "); Serial.print(pressure, 2); Serial.println(" kPa");
+
+  return true;
 }
