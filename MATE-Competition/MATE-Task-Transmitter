@@ -602,7 +602,7 @@ bool hold_depth(float target_depth_m, unsigned long duration_ms, int readings) {
 }
 
 // //================================================================================================================================================
-// //                                                                Surface (under-ice)
+// //                                                                Surface
 bool surface() {
   Serial.println("Surfacing...");
   move_to_depth(0.0);
