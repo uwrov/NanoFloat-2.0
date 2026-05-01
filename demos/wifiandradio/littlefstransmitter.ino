@@ -363,15 +363,6 @@ void setup() {
   }
 
 
-    // WiFi soft-AP 
-  Serial.println("Configuring access point...");
-  WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
-  IPAddress IP = WiFi.softAPIP();
-  Serial.print("AP IP address: ");
-  Serial.println(IP);
-  server.begin();
-  Serial.println("AP configured successfully!");
-
   // WiFi soft-AP 
   Serial.println("Configuring access point...");
   WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
