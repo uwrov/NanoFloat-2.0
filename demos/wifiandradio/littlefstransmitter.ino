@@ -110,6 +110,12 @@ bool sync_time() {
   Serial.println("\nSyncing time using NTP...");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected.");
+
   configTime(GMT_OFFSET, DAYLIGHT_OFFSET, NTP_SERVER);
 
   struct tm timeinfo;
