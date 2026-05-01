@@ -61,14 +61,14 @@ const char* LOG_FILE = "/NanoFloat_datalog.csv";
 //================================================================================================================================================
 //                                                        Function Prototypes
 
-void   writeFile(fs::FS &fs, const char* path, const char* message);
-void   appendFile(fs::FS &fs, const char* path, const char* message);
-bool   sync_time();
-void   read_sensor(float &depth, float &pressure);
-void   save_data(float depth, float pressure);
-void   radiotransmit_data();
-void   wifitransmit_data();
-void   initialize_radio();
+void writeFile(fs::FS &fs, const char* path, const char* message);
+void appendFile(fs::FS &fs, const char* path, const char* message);
+bool sync_time();
+void read_sensor(float &depth, float &pressure);
+void save_data(float depth, float pressure);
+void radiotransmit_data();
+void wifitransmit_data();
+void initialize_radio();
 
 //================================================================================================================================================
 //                                                        LittleFS Helpers
@@ -134,13 +134,16 @@ bool sync_time() {
 
 void read_sensor(float &depth, float &pressure) {
   pressureSensor.read();
-  depth    = pressureSensor.depth();
-  pressure = pressureSensor.pressure() * 0.1;   // mbar → kPa
+  depth = pressureSensor.depth();
+  pressure = pressureSensor.pressure() * 0.1;   // mbar -> kPa
 
-  if (depth < 0)         depth = 0;
-  if (depth > MAX_DEPTH) depth = MAX_DEPTH;
+  if (depth < 0) {
+    depth = 0;
+  }
+  if (depth > MAX_DEPTH) {
+    depth = MAX_DEPTH;
+  }
 }
-
 //================================================================================================================================================
 //                                                        Save Data
 
@@ -386,8 +389,8 @@ void setup() {
 
 enum Phase { PHASE_LOGGING, PHASE_RADIO, PHASE_WIFI, PHASE_DONE };
 Phase phase = PHASE_LOGGING;
-unsigned long phaseStart  = 0;
-unsigned long lastLog     = 0;
+unsigned long phaseStart = 0;
+unsigned long lastLog = 0;
 
 void loop() {
 
