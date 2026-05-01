@@ -110,7 +110,7 @@ bool sync_time() {
    Serial.println("\nSyncing time using NTP...");
 
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.begin(NTP_SSID, NTP_PASSWORD);
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);

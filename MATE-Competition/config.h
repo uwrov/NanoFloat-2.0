@@ -8,6 +8,9 @@
 const char* WIFI_SSID = "NanoFloat2.0";
 const char* WIFI_PASSWORD = "fernano";
 
+const char* NTP_SSID = "YourPhoneName";
+const char* NTP_PASSWORD = "YourHotspotPassword";
+
 // ------------------------------------------------------------
 // Encoder Test:
 // ------------------------------------------------------------
