@@ -48,7 +48,7 @@ const int DAYLIGHT_OFFSET =  3600;
 const char* LOG_FILE = "/NanoFloat_datalog.csv";
 
 // RFM95 frequency and TX interval
-#define RF95_FREQ    900.0
+#define RF95_FREQ    915.0
 #define TX_INTERVAL  5000
 
 #define FORMAT_LITTLEFS_IF_FAILED true
