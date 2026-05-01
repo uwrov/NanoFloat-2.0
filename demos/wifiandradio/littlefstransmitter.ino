@@ -108,13 +108,6 @@ void appendFile(fs::FS &fs, const char* path, const char* message) {
 
 bool sync_time() {
   Serial.println("\nSyncing time using NTP...");
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("\nWiFi connected.");
 
   configTime(GMT_OFFSET, DAYLIGHT_OFFSET, NTP_SERVER);
 
@@ -369,8 +362,15 @@ void setup() {
     Serial.println("Log file already exists, appending");
   }
 
-  // NTP time sync 
-  sync_time();
+
+    // WiFi soft-AP 
+  Serial.println("Configuring access point...");
+  WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(IP);
+  server.begin();
+  Serial.println("AP configured successfully!");
 
   // WiFi soft-AP 
   Serial.println("Configuring access point...");
@@ -380,6 +380,9 @@ void setup() {
   Serial.println(IP);
   server.begin();
   Serial.println("AP configured successfully!");
+
+  // NTP time sync 
+  sync_time();
 
   // Radio
   initialize_radio();
