@@ -728,7 +728,34 @@ bool vertical_profile(int profile_num) {
 }
 
 void competition_mission() {
- 
+  Serial.println(" COMPETITION MISSION STARTED");
+
+  const int NUM_PROFILES = 1;
+
+  for (int i = 1; i <= NUM_PROFILES; i++) {
+    bool worked = vertical_profile(i);
+    if (!worked) {
+      Serial.print("Mission halted at profile #");
+      Serial.println(i);
+      surface();
+      mission_complete = true;
+      return;
+    }
+    if (i < NUM_PROFILES) delay(5000);
+  }
+
+  delay(15000); // can change this depending on testing to see how long we need before data is ready to transmit
+
+  Serial.println("  MISSION COMPLETE — transmitting data");
+
+  if (radio_available) {
+    radiotransmit_data();
+  } else {
+    Serial.println("Radio unavailable — switching to WiFi transfer.");
+    wifitransmit_data();
+  }
+
+  mission_complete = true;
 }
 
 //================================================================================================================================================
