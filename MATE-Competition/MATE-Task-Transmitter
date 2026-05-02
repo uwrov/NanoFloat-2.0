@@ -690,105 +690,11 @@ void loop() {
 // //                                                              Competition Functions
 
 bool vertical_profile(int profile_num) {
-  Serial.println("");
-  Serial.println("|--------------------------------------------|");
-  Serial.println("|                                            |");
-  Serial.println("|              VERTICAL PROFILE              |");
-  Serial.println("|                                            |");
-  Serial.println("|--------------------------------------------|");
-  Serial.print(String(profile_num));
-  Serial.println("");
 
-  Serial.println("\n[Phase 1] Diving to 2.5 meters...");
-  if (!dive_to_depth(2.5)) {
-    Serial.println("ERROR: Failed to reach 2.5m!");
-    return false;
-  }
-  Serial.println("Reached 2.5m");
-
-  Serial.println("\n[Phase 2] Holding at 2.5 meters for 30 seconds...");
-  if (!hold_depth(2.5, 30000)) {
-    Serial.println("ERROR: Failed to hold 2.5m!");
-    return false;
-  }
-  Serial.println("Held 2.5m for 30 seconds");
-
-  Serial.println("\n[Phase 3] Ascending to 0.4 meters (40 cm)...");
-  if (!dive_to_depth(0.4)) {
-    Serial.println("ERROR: Failed to reach 0.4m!");
-    return false;
-  }
-  Serial.println("Reached 0.4m");
-
-  Serial.println("\n[Phase 4] Holding at 0.4 meters for 30 seconds...");
-  if (!hold_depth(0.4, 30000)) {
-    Serial.println("ERROR: Failed to hold 0.4m!");
-    return false;
-  }
-  Serial.println("Held 0.4m for 30 seconds");
-
-  current_depth = read_depth();
-  if (current_depth < 0.1) {
-    Serial.println("WARNING: Float may have broken surface!");
-  }
-
-  Serial.println("");
-  Serial.print("VERTICAL PROFILE ");
-  Serial.print(String(profile_num));
-  Serial.println(" COMPLETE");
-  Serial.println("");
-
-  return true;
 }
 
 void competition_mission() {
-  Serial.println("\n\n");
-  Serial.println("|--------------------------------------------|");
-  Serial.println("|                                            |");
-  Serial.println("|   STARTING COMPETITION MISSION - TASK 4.1  |");
-  Serial.println("|                                            |");
-  Serial.println("|--------------------------------------------|");
-  Serial.println("");
-
-  Serial.println("\n Executing Vertical Profiles");
-  delay(2000);
-  bool profile1_success = vertical_profile(1);
-
-  if (profile1_success) {
-    Serial.println("\n VERTICAL PROFILE 1 COMPLETE");
-  } else {
-    Serial.println("\n VERTICAL PROFILE 1 FAILED");
-  }
-
-  Serial.println("\nWaiting 10 seconds before Profile 2...");
-  delay(10000);
-
-  Serial.println("\n[3/3] Executing Vertical Profile 2...");
-  delay(2000);
-  bool profile2_success = vertical_profile(2);
-
-  if (profile2_success) {
-    Serial.println("\n VERTICAL PROFILE 2 COMPLETE");
-  } else {
-    Serial.println("\n VERTICAL PROFILE 2 FAILED");
-  }
-
-  Serial.println("\n\n");
-  Serial.println("|--------------------------------------------|");
-  Serial.println("|                                            |");
-  Serial.println("|      COMPETITION MISSION COMPLETE!         |");
-  Serial.println("|                                            |");
-  Serial.println("|--------------------------------------------|");
-
-  Serial.println("\n--------- MISSION SUMMARY ------------");
-  Serial.print("Vertical Profile 1: ");
-  Serial.println(profile1_success ? "SUCCESS" : "FAILED");
-  Serial.print("Vertical Profile 2: ");
-  Serial.println(profile2_success ? "SUCCESS" : "FAILED");
-  Serial.println("-----------------------------------------");
-  Serial.println("");
-
-  mission_complete = true;
+ 
 }
 
 //================================================================================================================================================
