@@ -690,7 +690,41 @@ void loop() {
 // //                                                              Competition Functions
 
 bool vertical_profile(int profile_num) {
+  Serial.print("VERTICAL PROFILE #: ");
+  Serial.println(profile_num);
 
+  Serial.println("Descending to 0.4 m...");
+  if (!move_to_depth(0.4f)) {
+    Serial.println("Profile aborted: could not reach 0.4 m.");
+    return false;
+  }
+
+  if (!hold_depth(0.4f, 30000UL, 7)) {
+    Serial.println("Profile aborted during hold at 0.4 m.");
+    return false;
+  }
+
+  Serial.println("Descending to 2.5 m...");
+  if (!move_to_depth(2.5f)) {
+    Serial.println("Profile aborted: could not reach 2.5 m.");
+    return false;
+  }
+
+  if (!hold_depth(2.5f, 30000UL, 7)) {
+    Serial.println("Profile aborted during hold at 2.5 m.");
+    return false;
+  }
+
+  Serial.println("Ascending to surface...");
+  if (!surface()) {
+    Serial.println("Profile aborted: could not surface.");
+    return false;
+  }
+
+  Serial.print("Profile #");
+  Serial.print(profile_num);
+  Serial.println(" complete.");
+  return true;
 }
 
 void competition_mission() {
