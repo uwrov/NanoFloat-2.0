@@ -670,18 +670,16 @@ bool surface() {
 // //                                                              Main Loop
 
 void loop() {
-  
-  // Auto-start competition mission after 10 seconds
+
   static bool mission_started = false;
-  if (millis() > 10000 && !mission_started && !mission_complete) {
+  if (!mission_started && !mission_complete && millis() > 10000UL) {
     mission_started = true;
     competition_mission();
   }
 
-  // Keep monitoring limit switch at all times
   if (digitalRead(PIN_LIMIT_SW) == HIGH) {
     piston_stop();
-    Serial.println("WARNING! Limit switch has been triggered.");
+    Serial.println("WARNING: limit switch triggered in loop().");
   }
 
 }
