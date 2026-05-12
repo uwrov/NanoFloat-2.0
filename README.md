@@ -1,4 +1,4 @@
 # NanoFloat-2.0
 
 Hardware:
-in PCB1_May_12th.zip
+Download Altium, the zip files in Hardware Final Files, extract and open them in Altium.
